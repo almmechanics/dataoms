@@ -1,0 +1,52 @@
+name:  $(TeamProject)_$(BuildDefinitionName)_$(SourceBranchName)_$(Date:yyyyMMdd)$(Rev:.rr)  
+
+trigger:
+- master
+
+variables:
+  StatefileContext: $(System.TeamProject)_$(Build.DefinitionName)_$(Build.Repository.Name)_$(Build.SourceBranchName)
+  Subscription: AzureSP2
+  TF_INPUT: 0
+
+stages:
+- stage: CI
+  displayName: 'Build'
+  jobs:
+  - job: Build
+    displayName: 'Create build artifact'
+    workspace:
+      clean: all
+    pool: 'private'
+    steps:
+    - publish: $(System.DefaultWorkingDirectory)
+      artifact: drop
+
+- stage: dev  
+  displayName: 'deploy dev'
+  variables:
+  - group: dev2-variables
+
+  jobs:
+  - deployment: dev
+    environment: dev
+    pool: 'private'
+    strategy: 
+      runOnce:
+        preDeploy:
+          steps:
+          - download: current
+            artifact: drop
+
+        deploy:
+          steps:
+          - template: templates/terraform-steps.yml
+            parameters:
+              backendServiceArm: $(Subscription)
+              workingDirectory: $(Pipeline.Workspace)/drop/pipeline
+              backendAzureRmResourceGroupName: $(Tf.ResourceGroup)
+              backendAzureRmStorageAccountName: $(Tf.StorageAccount)
+              backendAzureRmContainerName: $(Tf.Container)
+              environment: 'dev'
+              statefileContext: $(StatefileContext)              
+              client_secret: $(Tf.ClientSecret)
+              user: 'config'
